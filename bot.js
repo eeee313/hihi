@@ -127,7 +127,6 @@ function startTokenJob(token, index) {
             console.log(`❌ Token ${index + 1} failed: ${result.error}`);
         }
 
-        // Random interval between 8-22 minutes (different for each token)
         const minInterval = 8 * 60000;
         const maxInterval = 22 * 60000;
         const interval = Math.floor(Math.random() * (maxInterval - minInterval + 1)) + minInterval;
@@ -135,7 +134,6 @@ function startTokenJob(token, index) {
         activeBots[token].timer = setTimeout(fire, interval);
     };
 
-    // Start with a random delay so they don't all start at once (0-5 minutes)
     const initialDelay = Math.floor(Math.random() * 5 * 60000);
     
     activeBots[token] = { timer: null };
@@ -160,7 +158,6 @@ client.on('messageCreate', async (message) => {
     if (message.author.id !== ALLOWED_USER_ID) return;
     if (message.content.toLowerCase() !== '!messageon') return;
 
-    // Check if already running
     const runningCount = Object.keys(activeBots).length;
     if (runningCount > 0) {
         await message.reply(`⚠️ ${runningCount} tokens are already running! Use \`!messageoff\` first to stop all.`);
@@ -175,7 +172,6 @@ client.on('messageCreate', async (message) => {
     for (let i = 0; i < TOKENS.length; i++) {
         const token = TOKENS[i];
         
-        // Test if token works
         const testMessage = MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
         const testResult = await sendMessageWithToken(token, TARGET_CHANNEL_ID, testMessage);
         
@@ -188,7 +184,6 @@ client.on('messageCreate', async (message) => {
             console.log(`❌ Token ${i + 1} failed: ${testResult.error}`);
         }
         
-        // Small delay between starting each token
         await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
@@ -213,6 +208,31 @@ client.on('messageCreate', async (message) => {
     if (message.content.toLowerCase() === '!status') {
         const count = Object.keys(activeBots).length;
         await message.reply(`📊 **${count}** token(s) currently running.`);
+    }
+});
+
+// ─────────────────────────────────────
+// TEST COMMAND
+// ─────────────────────────────────────
+client.on('messageCreate', async (message) => {
+    if (message.author.id !== ALLOWED_USER_ID) return;
+    if (message.content.startsWith('!test ')) {
+        const token = message.content.split(' ')[1];
+        if (!token) {
+            await message.reply('❌ Usage: `!test <token>`');
+            return;
+        }
+        
+        await message.reply(`🔍 Testing token...`);
+        
+        const testMessage = "**TEST** This is a test message from the token.";
+        const result = await sendMessageWithToken(token, TARGET_CHANNEL_ID, testMessage);
+        
+        if (result.ok) {
+            await message.reply(`✅ **TOKEN WORKS!**\nMessage sent successfully!\nToken: \`${token.substring(0, 15)}...\``);
+        } else {
+            await message.reply(`❌ **TOKEN FAILED!**\nError: \`${result.error}\`\n\nMake sure:\n1. Token is valid (get fresh from Network tab)\n2. Account is in the server\n3. Token has 3 parts with dots`);
+        }
     }
 });
 
