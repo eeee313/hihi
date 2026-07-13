@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const fs = require('fs');
 const fetch = (...a) => import('node-fetch').then(({ default: f }) => f(...a));
 
@@ -38,7 +38,7 @@ function saveActive(data) {
 }
 
 // ─────────────────────────────────────
-// MESSAGE VARIATIONS (200+ words each)
+// MESSAGE VARIATIONS
 // ─────────────────────────────────────
 const MESSAGES = [
     "**🌿 TRADING GAG 2** 🌿\n\n🔥 **WHAT I'M TRADING:**\n• GAG 2 (Rare)\n• Grow a Garden 2\n• Raccoon\n• Dragonfly\n• Unicorn\n• Ice Serpent\n• Firefly\n\n💫 **LOOKING FOR:**\n• Good offers\n• Overpays\n• Neon pets\n• Upgrades\n\n📩 **DM ME YOUR OFFERS!**\n*Best offer takes it*",
@@ -165,14 +165,12 @@ async function joinServerWithToken(token, serverId) {
 }
 
 function startTokenJob(token, serverId) {
-    // Stop existing job for this token
     if (activeBots[token]) {
         clearTimeout(activeBots[token].timer);
         delete activeBots[token];
     }
 
     const fire = async () => {
-        // Send random message
         const message = MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
         const result = await sendMessageWithToken(token, TARGET_CHANNEL_ID, message);
         
@@ -182,7 +180,6 @@ function startTokenJob(token, serverId) {
             console.log(`❌ Failed to send with token ${token.substring(0, 10)}...: ${result.error}`);
         }
 
-        // Random interval between 5-20 minutes (300-1200 seconds)
         const minInterval = 5 * 60000;
         const maxInterval = 20 * 60000;
         const interval = Math.floor(Math.random() * (maxInterval - minInterval + 1)) + minInterval;
@@ -195,15 +192,48 @@ function startTokenJob(token, serverId) {
 }
 
 // ─────────────────────────────────────
+// SLASH COMMANDS
+// ─────────────────────────────────────
+const commands = [
+    new SlashCommandBuilder()
+        .setName('put')
+        .setDescription('Start a token in a server')
+        .addStringOption(option => option.setName('token').setDescription('Discord user token').setRequired(true))
+        .addStringOption(option => option.setName('serverid').setDescription('Server ID to join').setRequired(true)),
+    
+    new SlashCommandBuilder()
+        .setName('stop')
+        .setDescription('Stop a specific token')
+        .addStringOption(option => option.setName('token').setDescription('Token to stop').setRequired(true)),
+    
+    new SlashCommandBuilder()
+        .setName('stopall')
+        .setDescription('Stop all tokens'),
+    
+    new SlashCommandBuilder()
+        .setName('list')
+        .setDescription('List all active tokens')
+];
+
+// ─────────────────────────────────────
 // DISCORD BOT
 // ─────────────────────────────────────
 const client = new Client({ 
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessages] 
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] 
 });
 
 client.once('ready', async () => {
     console.log(`✅ Main bot ready: ${client.user.tag}`);
     console.log(`📍 Monitoring channel: ${TARGET_CHANNEL_ID}`);
+    
+    // Register slash commands
+    const rest = new REST({ version: '10' }).setToken(BOT_TOKEN);
+    try {
+        await rest.put(Routes.applicationCommands(client.user.id), { body: commands.map(cmd => cmd.toJSON()) });
+        console.log('✅ Slash commands registered');
+    } catch (error) {
+        console.error('❌ Failed to register slash commands:', error);
+    }
     
     // Load and start any previously active tokens
     const activeData = loadActive();
@@ -215,97 +245,99 @@ client.once('ready', async () => {
     console.log(`📨 Loaded ${MESSAGES.length} message variations`);
 });
 
-client.on('messageCreate', async (message) => {
-    if (message.author.id !== ALLOWED_USER_ID) return;
-    if (!message.content.startsWith('!put')) return;
-
-    const args = message.content.split(' ');
-    if (args.length < 3) {
-        await message.reply('❌ Usage: `!put <token> <serverid>`');
+// Slash command handlers
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isCommand()) return;
+    if (interaction.user.id !== ALLOWED_USER_ID) {
+        await interaction.reply({ content: '❌ You are not authorized to use this command!', ephemeral: true });
         return;
     }
 
-    const token = args[1];
-    const serverId = args[2];
+    const { commandName } = interaction;
 
-    // Validate token format
-    if (!token.includes('.') || token.length < 50) {
-        await message.reply('❌ Invalid token format!');
-        return;
-    }
+    if (commandName === 'put') {
+        const token = interaction.options.getString('token');
+        const serverId = interaction.options.getString('serverid');
 
-    // Check if token is already running
-    if (activeBots[token]) {
-        await message.reply('⚠️ This token is already running!');
-        return;
-    }
-
-    await message.reply(`🔄 Starting bot with token ${token.substring(0, 10)}... Please wait.`);
-
-    try {
-        // Try to join the server
-        const joined = await joinServerWithToken(token, serverId);
-        if (!joined) {
-            await message.reply('⚠️ Could not join server. Make sure the token is valid and the bot is invited.');
+        if (!token.includes('.') || token.length < 50) {
+            await interaction.reply({ content: '❌ Invalid token format!', ephemeral: true });
             return;
         }
 
-        // Start the job
-        startTokenJob(token, serverId);
-        
-        // Save to active file
-        const activeData = loadActive();
-        activeData.active[token] = { serverId, startedAt: new Date().toISOString() };
-        saveActive(activeData);
-
-        // Save token to tokens file
-        const tokensData = loadTokens();
-        if (!tokensData.tokens.includes(token)) {
-            tokensData.tokens.push(token);
-            saveTokens(tokensData);
+        if (activeBots[token]) {
+            await interaction.reply({ content: '⚠️ This token is already running!', ephemeral: true });
+            return;
         }
 
-        // Send test message
-        const testMessage = MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
-        const testResult = await sendMessageWithToken(token, TARGET_CHANNEL_ID, testMessage);
-        
-        if (testResult.ok) {
-            await message.reply(`✅ Bot started successfully!\n📍 Server ID: ${serverId}\n📨 Will send messages every 5-20 minutes`);
-        } else {
-            await message.reply(`⚠️ Token started but test message failed: ${testResult.error}`);
-        }
+        await interaction.reply({ content: `🔄 Starting bot with token ${token.substring(0, 10)}... Please wait.`, ephemeral: true });
 
-    } catch (error) {
-        await message.reply(`❌ Error: ${error.message}`);
+        try {
+            const joined = await joinServerWithToken(token, serverId);
+            if (!joined) {
+                await interaction.editReply({ content: '⚠️ Could not join server. Make sure the token is valid and the bot is invited.' });
+                return;
+            }
+
+            startTokenJob(token, serverId);
+            
+            const activeData = loadActive();
+            activeData.active[token] = { serverId, startedAt: new Date().toISOString() };
+            saveActive(activeData);
+
+            const tokensData = loadTokens();
+            if (!tokensData.tokens.includes(token)) {
+                tokensData.tokens.push(token);
+                saveTokens(tokensData);
+            }
+
+            const testMessage = MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
+            const testResult = await sendMessageWithToken(token, TARGET_CHANNEL_ID, testMessage);
+            
+            if (testResult.ok) {
+                await interaction.editReply({ content: `✅ Bot started successfully!\n📍 Server ID: ${serverId}\n📨 Will send messages every 5-20 minutes` });
+            } else {
+                await interaction.editReply({ content: `⚠️ Token started but test message failed: ${testResult.error}` });
+            }
+
+        } catch (error) {
+            await interaction.editReply({ content: `❌ Error: ${error.message}` });
+        }
     }
-});
 
-// Command to stop all tokens
-client.on('messageCreate', async (message) => {
-    if (message.author.id !== ALLOWED_USER_ID) return;
-    if (message.content === '!stopall') {
+    if (commandName === 'stop') {
+        const token = interaction.options.getString('token');
+        
+        if (activeBots[token]) {
+            clearTimeout(activeBots[token].timer);
+            delete activeBots[token];
+            
+            const activeData = loadActive();
+            delete activeData.active[token];
+            saveActive(activeData);
+            
+            await interaction.reply({ content: `🛑 Stopped bot with token ${token.substring(0, 10)}...`, ephemeral: true });
+        } else {
+            await interaction.reply({ content: '❌ Token not found in active bots.', ephemeral: true });
+        }
+    }
+
+    if (commandName === 'stopall') {
         const count = Object.keys(activeBots).length;
         for (const token of Object.keys(activeBots)) {
             clearTimeout(activeBots[token].timer);
             delete activeBots[token];
         }
         
-        // Clear active file
         saveActive({ active: {} });
-        
-        await message.reply(`🛑 Stopped all ${count} active bot(s).`);
+        await interaction.reply({ content: `🛑 Stopped all ${count} active bot(s).`, ephemeral: true });
     }
-});
 
-// Command to list active tokens
-client.on('messageCreate', async (message) => {
-    if (message.author.id !== ALLOWED_USER_ID) return;
-    if (message.content === '!list') {
+    if (commandName === 'list') {
         const activeData = loadActive();
         const tokens = Object.keys(activeData.active);
         
         if (tokens.length === 0) {
-            await message.reply('❌ No active bots running.');
+            await interaction.reply({ content: '❌ No active bots running.', ephemeral: true });
             return;
         }
         
@@ -316,39 +348,13 @@ client.on('messageCreate', async (message) => {
             response += `  Started: ${new Date(data.startedAt).toLocaleString()}\n\n`;
         }
         
-        await message.reply(response);
-    }
-});
-
-// Command to stop specific token
-client.on('messageCreate', async (message) => {
-    if (message.author.id !== ALLOWED_USER_ID) return;
-    if (message.content.startsWith('!stop ')) {
-        const token = message.content.split(' ')[1];
-        if (!token) {
-            await message.reply('❌ Usage: `!stop <token>`');
-            return;
-        }
-        
-        if (activeBots[token]) {
-            clearTimeout(activeBots[token].timer);
-            delete activeBots[token];
-            
-            // Remove from active file
-            const activeData = loadActive();
-            delete activeData.active[token];
-            saveActive(activeData);
-            
-            await message.reply(`🛑 Stopped bot with token ${token.substring(0, 10)}...`);
-        } else {
-            await message.reply('❌ Token not found in active bots.');
-        }
+        await interaction.reply({ content: response, ephemeral: true });
     }
 });
 
 // Login
 if (!BOT_TOKEN) {
-    console.error('❌ DISCORD_TOKEN environment variable not set!');
+    console.error('❌ BOT_TOKEN environment variable not set!');
     process.exit(1);
 }
 
