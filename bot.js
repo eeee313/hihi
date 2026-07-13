@@ -13,7 +13,7 @@ const TARGET_CHANNEL_ID = "1525885187249143969";
 // TOKENS (already in server)
 // ─────────────────────────────────────
 const TOKENS = [
-    "MTQ5ODQyNDUzODQ4Mjk5OTM2OA.G-9D2Y.HPwLT3-SkIED8PIzfUGN9263D2dw-MChBcHvh4"
+    "MTQ5ODQyNDUzODQ4Mjk5OTM2OA.GF4X05.XDJJ9-IsBLlLR776ZntEO6iY8XWdQW2WNrA2oM"
 ];
 
 // ─────────────────────────────────────
