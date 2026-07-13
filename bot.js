@@ -146,20 +146,39 @@ async function sendMessageWithToken(token, channelId, message) {
 
 async function joinServerWithToken(token, serverId) {
     try {
-        const res = await fetch(`https://discord.com/api/v9/guilds/${serverId}/members`, {
+        // First try the correct endpoint for user tokens
+        const res = await fetch(`https://discord.com/api/v9/guilds/${serverId}/members/@me`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': token,
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        console.log(`Join server response status: ${res.status}`);
+        
+        if (res.status === 201 || res.status === 204) {
+            return true;
+        }
+        
+        // If that fails, try the alternative endpoint
+        const res2 = await fetch(`https://discord.com/api/v9/guilds/${serverId}/members`, {
             method: 'PUT',
             headers: {
                 'Authorization': token,
                 'Content-Type': 'application/json',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             },
-            body: JSON.stringify({ 
-                access_token: token,
-                user_id: 'self'
+            body: JSON.stringify({
+                access_token: token
             })
         });
-        return res.ok;
+        
+        console.log(`Alternative join response status: ${res2.status}`);
+        return res2.ok;
     } catch (e) {
+        console.error(`Join error: ${e.message}`);
         return false;
     }
 }
