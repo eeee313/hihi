@@ -5,7 +5,7 @@ const fetch = (...a) => import('node-fetch').then(({ default: f }) => f(...a));
 // ─────────────────────────────────────
 // CONFIGURATION
 // ─────────────────────────────────────
-const BOT_TOKEN = process.env.DISCORD_TOKEN;
+const BOT_TOKEN = process.env.BOT_TOKEN;
 const ALLOWED_USER_ID = "1173953184113360910";
 const TARGET_CHANNEL_ID = "1525885187249143969";
 
